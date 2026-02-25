@@ -1,0 +1,5 @@
+build/
+mruby/
+*.o
+*.a
+.DS_Store
