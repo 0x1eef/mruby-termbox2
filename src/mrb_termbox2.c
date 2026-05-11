@@ -1,5 +1,6 @@
 /* Configure termbox2 before including */
 #define TB_OPT_ATTR_W 32
+#define TB_OPT_EGC
 #define TB_IMPL
 
 #include "mruby.h"
@@ -9,6 +10,7 @@
 #include "mruby/variable.h"
 #include "mruby/error.h"
 #include "termbox2.h"
+#include <errno.h>
 
 static struct RClass *tb2_module;
 static struct RClass *tb2_error_class;
@@ -30,6 +32,12 @@ static const mrb_data_type tb_event_data_type = {
   }                                                                 \
 } while (0)
 
+#define TB_RETRY(rv, expr) do {                                     \
+  do {                                                             \
+    (rv) = (expr);                                                 \
+  } while ((rv) < 0 && tb_last_errno() == EINTR);                  \
+} while (0)
+
 static mrb_value
 new_event(mrb_state *mrb, const struct tb_event *ev)
 {
@@ -43,7 +51,8 @@ new_event(mrb_state *mrb, const struct tb_event *ev)
 static mrb_value
 mrb_tb2_init(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_init();
+  int rv;
+  TB_RETRY(rv, tb_init());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -53,7 +62,8 @@ mrb_tb2_init_file(mrb_state *mrb, mrb_value self)
 {
   const char *path;
   mrb_get_args(mrb, "z", &path);
-  int rv = tb_init_file(path);
+  int rv;
+  TB_RETRY(rv, tb_init_file(path));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -63,7 +73,8 @@ mrb_tb2_init_fd(mrb_state *mrb, mrb_value self)
 {
   mrb_int fd;
   mrb_get_args(mrb, "i", &fd);
-  int rv = tb_init_fd((int)fd);
+  int rv;
+  TB_RETRY(rv, tb_init_fd((int)fd));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -73,7 +84,8 @@ mrb_tb2_init_rwfd(mrb_state *mrb, mrb_value self)
 {
   mrb_int rfd, wfd;
   mrb_get_args(mrb, "ii", &rfd, &wfd);
-  int rv = tb_init_rwfd((int)rfd, (int)wfd);
+  int rv;
+  TB_RETRY(rv, tb_init_rwfd((int)rfd, (int)wfd));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -81,7 +93,8 @@ mrb_tb2_init_rwfd(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_shutdown(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_shutdown();
+  int rv;
+  TB_RETRY(rv, tb_shutdown());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -91,7 +104,8 @@ mrb_tb2_shutdown(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_width(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_width();
+  int rv;
+  TB_RETRY(rv, tb_width());
   TB_CHECK(mrb, rv);
   return mrb_fixnum_value(rv);
 }
@@ -99,7 +113,8 @@ mrb_tb2_width(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_height(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_height();
+  int rv;
+  TB_RETRY(rv, tb_height());
   TB_CHECK(mrb, rv);
   return mrb_fixnum_value(rv);
 }
@@ -107,7 +122,8 @@ mrb_tb2_height(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_clear(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_clear();
+  int rv;
+  TB_RETRY(rv, tb_clear());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -117,7 +133,8 @@ mrb_tb2_set_clear_attrs(mrb_state *mrb, mrb_value self)
 {
   mrb_int fg, bg;
   mrb_get_args(mrb, "ii", &fg, &bg);
-  int rv = tb_set_clear_attrs((uintattr_t)fg, (uintattr_t)bg);
+  int rv;
+  TB_RETRY(rv, tb_set_clear_attrs((uintattr_t)fg, (uintattr_t)bg));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -125,7 +142,8 @@ mrb_tb2_set_clear_attrs(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_present(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_present();
+  int rv;
+  TB_RETRY(rv, tb_present());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -133,7 +151,8 @@ mrb_tb2_present(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_invalidate(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_invalidate();
+  int rv;
+  TB_RETRY(rv, tb_invalidate());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -145,7 +164,8 @@ mrb_tb2_set_cursor(mrb_state *mrb, mrb_value self)
 {
   mrb_int x, y;
   mrb_get_args(mrb, "ii", &x, &y);
-  int rv = tb_set_cursor((int)x, (int)y);
+  int rv;
+  TB_RETRY(rv, tb_set_cursor((int)x, (int)y));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -153,7 +173,8 @@ mrb_tb2_set_cursor(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_hide_cursor(mrb_state *mrb, mrb_value self)
 {
-  int rv = tb_hide_cursor();
+  int rv;
+  TB_RETRY(rv, tb_hide_cursor());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -165,7 +186,8 @@ mrb_tb2_set_cell(mrb_state *mrb, mrb_value self)
 {
   mrb_int x, y, ch, fg, bg;
   mrb_get_args(mrb, "iiiii", &x, &y, &ch, &fg, &bg);
-  int rv = tb_set_cell((int)x, (int)y, (uint32_t)ch, (uintattr_t)fg, (uintattr_t)bg);
+  int rv;
+  TB_RETRY(rv, tb_set_cell((int)x, (int)y, (uint32_t)ch, (uintattr_t)fg, (uintattr_t)bg));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -175,7 +197,8 @@ mrb_tb2_extend_cell(mrb_state *mrb, mrb_value self)
 {
   mrb_int x, y, ch;
   mrb_get_args(mrb, "iii", &x, &y, &ch);
-  int rv = tb_extend_cell((int)x, (int)y, (uint32_t)ch);
+  int rv;
+  TB_RETRY(rv, tb_extend_cell((int)x, (int)y, (uint32_t)ch));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
@@ -187,7 +210,8 @@ mrb_tb2_set_input_mode(mrb_state *mrb, mrb_value self)
 {
   mrb_int mode;
   mrb_get_args(mrb, "i", &mode);
-  int rv = tb_set_input_mode((int)mode);
+  int rv;
+  TB_RETRY(rv, tb_set_input_mode((int)mode));
   TB_CHECK(mrb, rv);
   return mrb_fixnum_value(rv);
 }
@@ -197,7 +221,8 @@ mrb_tb2_set_output_mode(mrb_state *mrb, mrb_value self)
 {
   mrb_int mode;
   mrb_get_args(mrb, "i", &mode);
-  int rv = tb_set_output_mode((int)mode);
+  int rv;
+  TB_RETRY(rv, tb_set_output_mode((int)mode));
   TB_CHECK(mrb, rv);
   return mrb_fixnum_value(rv);
 }
@@ -208,7 +233,8 @@ static mrb_value
 mrb_tb2_poll_event(mrb_state *mrb, mrb_value self)
 {
   struct tb_event ev;
-  int rv = tb_poll_event(&ev);
+  int rv;
+  TB_RETRY(rv, tb_poll_event(&ev));
   TB_CHECK(mrb, rv);
   return new_event(mrb, &ev);
 }
@@ -219,8 +245,10 @@ mrb_tb2_peek_event(mrb_state *mrb, mrb_value self)
   mrb_int timeout_ms;
   mrb_get_args(mrb, "i", &timeout_ms);
   struct tb_event ev;
-  int rv = tb_peek_event(&ev, (int)timeout_ms);
-  if (rv == TB_ERR_NO_EVENT) return mrb_nil_value();
+  int rv;
+  TB_RETRY(rv, tb_peek_event(&ev, (int)timeout_ms));
+  if (rv == TB_ERR_NO_EVENT)
+    return mrb_nil_value();
   TB_CHECK(mrb, rv);
   return new_event(mrb, &ev);
 }
@@ -233,7 +261,8 @@ mrb_tb2_print(mrb_state *mrb, mrb_value self)
   mrb_int x, y, fg, bg;
   const char *str;
   mrb_get_args(mrb, "iiiiz", &x, &y, &fg, &bg, &str);
-  int rv = tb_print((int)x, (int)y, (uintattr_t)fg, (uintattr_t)bg, str);
+  int rv;
+  TB_RETRY(rv, tb_print((int)x, (int)y, (uintattr_t)fg, (uintattr_t)bg, str));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
