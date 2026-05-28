@@ -38,6 +38,13 @@ static const mrb_data_type tb_event_data_type = {
   } while ((rv) < 0 && tb_last_errno() == EINTR);                  \
 } while (0)
 
+#define TB_RETRY_PRESENT(rv, expr) do {                             \
+  do {                                                             \
+    (rv) = (expr);                                                 \
+  } while ((rv) < 0 &&                                             \
+           (tb_last_errno() == EINTR || tb_last_errno() == EAGAIN)); \
+} while (0)
+
 static mrb_value
 new_event(mrb_state *mrb, const struct tb_event *ev)
 {
@@ -143,7 +150,7 @@ static mrb_value
 mrb_tb2_present(mrb_state *mrb, mrb_value self)
 {
   int rv;
-  TB_RETRY(rv, tb_present());
+  TB_RETRY_PRESENT(rv, tb_present());
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
 }
