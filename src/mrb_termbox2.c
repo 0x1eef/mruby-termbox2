@@ -16,6 +16,15 @@ static struct RClass *tb2_module;
 static struct RClass *tb2_error_class;
 static struct RClass *tb2_event_class;
 
+static const char *
+tb2_strerror(int rv)
+{
+  if (rv == TB_ERR && tb_last_errno() == 0) {
+    return "Termbox operation failed without errno";
+  }
+  return tb_strerror(rv);
+}
+
 static void
 tb_event_free(mrb_state *mrb, void *ptr)
 {
@@ -28,7 +37,7 @@ static const mrb_data_type tb_event_data_type = {
 
 #define TB_CHECK(mrb, rv) do {                                      \
   if ((rv) < 0) {                                                   \
-    mrb_raise(mrb, tb2_error_class, tb_strerror(rv));               \
+    mrb_raise(mrb, tb2_error_class, tb2_strerror(rv));              \
   }                                                                 \
 } while (0)
 
