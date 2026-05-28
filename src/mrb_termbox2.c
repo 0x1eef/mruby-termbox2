@@ -51,7 +51,8 @@ static const mrb_data_type tb_event_data_type = {
   do {                                                             \
     (rv) = (expr);                                                 \
   } while ((rv) < 0 &&                                             \
-           (tb_last_errno() == EINTR || tb_last_errno() == EAGAIN)); \
+           (tb_last_errno() == EINTR || tb_last_errno() == EAGAIN || \
+            ((rv) == TB_ERR && tb_last_errno() == 0)));            \
 } while (0)
 
 static mrb_value
