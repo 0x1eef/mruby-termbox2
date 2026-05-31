@@ -262,9 +262,10 @@ mrb_tb2_peek_event(mrb_state *mrb, mrb_value self)
   mrb_int timeout_ms;
   mrb_get_args(mrb, "i", &timeout_ms);
   struct tb_event ev;
-  int rv;
-  TB_RETRY(rv, tb_peek_event(&ev, (int)timeout_ms));
+  int rv = tb_peek_event(&ev, (int)timeout_ms);
   if (rv == TB_ERR_NO_EVENT)
+    return mrb_nil_value();
+  if (rv < 0 && tb_last_errno() == EINTR)
     return mrb_nil_value();
   TB_CHECK(mrb, rv);
   return new_event(mrb, &ev);
