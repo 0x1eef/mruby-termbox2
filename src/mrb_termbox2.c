@@ -48,10 +48,12 @@ static const mrb_data_type tb_event_data_type = {
 } while (0)
 
 #define TB_RETRY_PRESENT(rv, expr) do {                             \
+  int retries = 8;                                                   \
   do {                                                             \
     (rv) = (expr);                                                 \
-  } while ((rv) < 0 &&                                             \
+  } while ((rv) < 0 && retries-- > 0 &&                            \
            (tb_last_errno() == EINTR || tb_last_errno() == EAGAIN || \
+            tb_last_errno() == ENOENT ||                            \
             ((rv) == TB_ERR && tb_last_errno() == 0)));            \
 } while (0)
 
