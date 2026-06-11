@@ -2413,6 +2413,19 @@ int tb_present(void) {
 
     int rv;
 
+    /*
+     * A failed or partial write leaves bytes queued in global.out. Do not walk
+     * the screen and append another rendered frame while those bytes are still
+     * pending: on a slow or nonblocking terminal this duplicates output and can
+     * grow the buffer until tb_realloc reports TB_ERR_MEM. Drain the existing
+     * bytes first; if the terminal is still backpressured, bytebuf_flush()
+     * returns TB_ERR and the caller can retry on the next present.
+     */
+    if (global.out.len > 0) {
+        if_err_return(rv, bytebuf_flush(&global.out, global.wfd));
+        return TB_OK;
+    }
+
     // TODO: Assert global.back.(width,height) == global.front.(width,height)
 
     global.last_x = -1;
@@ -2437,22 +2450,31 @@ int tb_present(void) {
             if (w < 1) w = 1; // wcwidth returns -1 for invalid codepoints
 
             if (cell_cmp(back, front) != 0) {
-                cell_copy(front, back);
+                /*
+                 * All helpers in this block can allocate or append to the
+                 * output buffer. Treat failures as real present failures
+                 * instead of continuing with partially updated front state:
+                 * ignoring these return values hides allocation errors and
+                 * makes the front/back buffers disagree about what was sent.
+                 */
+                if_err_return(rv, cell_copy(front, back));
 
-                send_attr(back->fg, back->bg);
+                if_err_return(rv, send_attr(back->fg, back->bg));
                 if (w > 1 && x >= global.front.width - (w - 1)) {
                     // Not enough room for wide char, send spaces
                     for (i = x; i < global.front.width; i++) {
-                        send_char(i, y, ' ');
+                        if_err_return(rv, send_char(i, y, ' '));
                     }
                 } else {
                     {
 #ifdef TB_OPT_EGC
-                        if (back->nech > 0)
-                            send_cluster(x, y, back->ech, back->nech);
-                        else
+                        if (back->nech > 0) {
+                            if_err_return(rv, send_cluster(x, y, back->ech, back->nech));
+                        } else
 #endif
-                            send_char(x, y, back->ch);
+                        {
+                            if_err_return(rv, send_char(x, y, back->ch));
+                        }
                     }
 
                     // When wcwidth>1, we need to advance the cursor by more
@@ -4195,14 +4217,25 @@ static int bytebuf_shift(struct bytebuf *b, size_t n) {
 }
 
 static int bytebuf_flush(struct bytebuf *b, int fd) {
-    if (b->len <= 0) return TB_OK;
-    ssize_t write_rv = write(fd, b->buf, b->len);
-    if (write_rv < 0 || (size_t)write_rv != b->len) {
-        // Note, errno will be 0 on partial write
-        global.last_errno = errno;
+    /*
+     * write(2) is allowed to accept only part of the buffer. The old all-or-
+     * nothing handling kept already-written bytes queued, so the next flush
+     * replayed duplicate escape sequences. Shift successful writes out of the
+     * buffer and preserve only the unwritten suffix; transient failures leave
+     * that suffix queued for a later present.
+     */
+    while (b->len > 0) {
+        ssize_t write_rv = write(fd, b->buf, b->len);
+        if (write_rv > 0) {
+            bytebuf_shift(b, (size_t)write_rv);
+            continue;
+        }
+        if (write_rv < 0 && errno == EINTR) {
+            continue;
+        }
+        global.last_errno = write_rv < 0 ? errno : EAGAIN;
         return TB_ERR;
     }
-    b->len = 0;
     return TB_OK;
 }
 
@@ -4211,6 +4244,15 @@ static int bytebuf_reserve(struct bytebuf *b, size_t sz) {
 
     size_t newcap = b->cap > 0 ? b->cap : 1;
     while (newcap < sz) {
+        /*
+         * Capacity grows by doubling, so an unchecked multiply can wrap around
+         * to a small value and make the following memcpy write past the buffer.
+         * Report TB_ERR_MEM before overflow; callers already treat that as the
+         * terminal output buffer being unable to grow.
+         */
+        if (newcap > ((size_t)-1) / 2) {
+            return TB_ERR_MEM;
+        }
         newcap *= 2;
     }
 
