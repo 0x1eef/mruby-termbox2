@@ -155,7 +155,8 @@ mrb_tb2_present(mrb_state *mrb, mrb_value self)
   if (rv < 0 &&
       (tb_last_errno() == EINTR ||
        tb_last_errno() == EAGAIN ||
-       tb_last_errno() == EINPROGRESS)) {
+       tb_last_errno() == EINPROGRESS ||
+       tb_last_errno() == ENOENT)) {
     return mrb_false_value();
   }
   TB_CHECK(mrb, rv);
