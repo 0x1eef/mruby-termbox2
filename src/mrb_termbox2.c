@@ -47,17 +47,6 @@ static const mrb_data_type tb_event_data_type = {
   } while ((rv) < 0 && tb_last_errno() == EINTR);                  \
 } while (0)
 
-#define TB_RETRY_PRESENT(rv, expr) do {                             \
-  int retries = 8;                                                   \
-  do {                                                             \
-    (rv) = (expr);                                                 \
-  } while ((rv) < 0 && retries-- > 0 &&                            \
-           (tb_last_errno() == EINTR || tb_last_errno() == EAGAIN || \
-            tb_last_errno() == EINPROGRESS ||                        \
-            tb_last_errno() == ENOENT ||                             \
-            ((rv) == TB_ERR && tb_last_errno() == 0)));            \
-} while (0)
-
 static mrb_value
 new_event(mrb_state *mrb, const struct tb_event *ev)
 {
@@ -162,10 +151,11 @@ mrb_tb2_set_clear_attrs(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_tb2_present(mrb_state *mrb, mrb_value self)
 {
-  int rv;
-  TB_RETRY_PRESENT(rv, tb_present());
+  int rv = tb_present();
   if (rv < 0 &&
-      (tb_last_errno() == EAGAIN || tb_last_errno() == EINPROGRESS)) {
+      (tb_last_errno() == EINTR ||
+       tb_last_errno() == EAGAIN ||
+       tb_last_errno() == EINPROGRESS)) {
     return mrb_false_value();
   }
   TB_CHECK(mrb, rv);
