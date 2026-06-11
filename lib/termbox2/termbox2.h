@@ -2419,11 +2419,13 @@ int tb_present(void) {
      * pending: on a slow or nonblocking terminal this duplicates output and can
      * grow the buffer until tb_realloc reports TB_ERR_MEM. Drain the existing
      * bytes first; if the terminal is still backpressured, bytebuf_flush()
-     * returns TB_ERR and the caller can retry on the next present.
+     * returns TB_ERR and the caller can retry on the next present. Once the
+     * pending bytes are drained, continue below and render the current back
+     * buffer; otherwise a caller that only redraws on changes can be left with
+     * a blank or stale terminal until some unrelated event forces another draw.
      */
     if (global.out.len > 0) {
         if_err_return(rv, bytebuf_flush(&global.out, global.wfd));
-        return TB_OK;
     }
 
     // TODO: Assert global.back.(width,height) == global.front.(width,height)
@@ -2451,14 +2453,13 @@ int tb_present(void) {
 
             if (cell_cmp(back, front) != 0) {
                 /*
-                 * All helpers in this block can allocate or append to the
-                 * output buffer. Treat failures as real present failures
-                 * instead of continuing with partially updated front state:
-                 * ignoring these return values hides allocation errors and
-                 * makes the front/back buffers disagree about what was sent.
+                 * Queue terminal output before updating the front buffer. If
+                 * output-buffer growth fails, the old front state remains
+                 * intact and the next present can retry the same diff. Updating
+                 * front first makes termbox believe a cell was presented even
+                 * when no bytes for it were queued, which can leave a blank
+                 * screen after a failed clear/full repaint.
                  */
-                if_err_return(rv, cell_copy(front, back));
-
                 if_err_return(rv, send_attr(back->fg, back->bg));
                 if (w > 1 && x >= global.front.width - (w - 1)) {
                     // Not enough room for wide char, send spaces
@@ -2476,7 +2477,11 @@ int tb_present(void) {
                             if_err_return(rv, send_char(x, y, back->ch));
                         }
                     }
+                }
 
+                if_err_return(rv, cell_copy(front, back));
+
+                if (!(w > 1 && x >= global.front.width - (w - 1))) {
                     // When wcwidth>1, we need to advance the cursor by more
                     // than 1, thereby skipping some cells. Set these skipped
                     // cells to an invalid codepoint in the front buffer, so
