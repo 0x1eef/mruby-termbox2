@@ -37,6 +37,8 @@ assert("Termbox2 responds to module functions") do
   assert_true Termbox2.respond_to?(:poll_event)
   assert_true Termbox2.respond_to?(:peek_event)
   assert_true Termbox2.respond_to?(:print)
+  assert_true Termbox2.respond_to?(:send_bytes)
+  assert_true Termbox2.respond_to?(:scroll_region)
   assert_true Termbox2.respond_to?(:last_errno)
   assert_true Termbox2.respond_to?(:strerror)
   assert_true Termbox2.respond_to?(:"has_truecolor?")

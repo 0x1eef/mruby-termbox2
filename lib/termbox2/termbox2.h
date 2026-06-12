@@ -488,6 +488,15 @@ int tb_set_clear_attrs(uintattr_t fg, uintattr_t bg);
 /* Synchronize the internal back buffer with the terminal by writing to tty. */
 int tb_present(void);
 
+/* Scroll a terminal region using terminal-native scrolling.
+ *
+ * `y` and `height` are zero-based screen coordinates. A positive `delta`
+ * scrolls the region up; a negative `delta` scrolls it down. Newly exposed
+ * rows are cleared in both cell buffers so the caller can repaint just those
+ * rows and call `tb_present`.
+ */
+int tb_scroll_region(int y, int height, int delta);
+
 /* Clear the internal front buffer effectively forcing a complete re-render of
  * the back buffer to the tty. It is not necessary to call this under normal
  * circumstances.
@@ -2327,6 +2336,9 @@ static int cellbuf_clear(struct cellbuf *c);
 static int cellbuf_get(struct cellbuf *c, int x, int y, struct tb_cell **out);
 static int cellbuf_in_bounds(struct cellbuf *c, int x, int y);
 static int cellbuf_resize(struct cellbuf *c, int w, int h);
+static int cellbuf_clear_row_range(struct cellbuf *c, int y, int height);
+static int cellbuf_scroll_region(struct cellbuf *c, int y, int height,
+    int delta);
 static int bytebuf_puts(struct bytebuf *b, const char *str);
 static int bytebuf_nputs(struct bytebuf *b, const char *str, size_t nstr);
 static int bytebuf_shift(struct bytebuf *b, size_t n);
@@ -2503,6 +2515,42 @@ int tb_present(void) {
     }
 
     if_err_return(rv, send_cursor_if(global.cursor_x, global.cursor_y));
+    if_err_return(rv, bytebuf_flush(&global.out, global.wfd));
+
+    return TB_OK;
+}
+
+int tb_scroll_region(int y, int height, int delta) {
+    if_not_init_return();
+
+    if (delta == 0 || height <= 1) return TB_OK;
+    if (y < 0 || y >= global.height) return TB_ERR_OUT_OF_BOUNDS;
+
+    int bottom = y + height - 1;
+    if (bottom >= global.height) bottom = global.height - 1;
+    if (bottom <= y) return TB_OK;
+
+    int lines = delta < 0 ? -delta : delta;
+    int region_height = bottom - y + 1;
+    if (lines > region_height) lines = region_height;
+
+    int rv;
+
+    /*
+     * Terminal-native scrolling is much cheaper than repainting every row in
+     * a viewport over a slow SSH link, but sending the escape sequence alone
+     * would make the physical terminal diverge from termbox's cell buffers.
+     * Keep both buffers in lockstep with the terminal and clear the newly
+     * exposed rows so the caller can repaint only those rows before the next
+     * tb_present.
+     */
+    if_err_return(rv, tb_sendf("\x1b[%d;%dr", y + 1, bottom + 1));
+    if_err_return(rv, tb_sendf("\x1b[%d%c", lines, delta > 0 ? 'S' : 'T'));
+    if_err_return(rv, bytebuf_puts(&global.out, "\x1b[r"));
+    if_err_return(rv, cellbuf_scroll_region(&global.front, y, region_height,
+        delta > 0 ? lines : -lines));
+    if_err_return(rv, cellbuf_scroll_region(&global.back, y, region_height,
+        delta > 0 ? lines : -lines));
     if_err_return(rv, bytebuf_flush(&global.out, global.wfd));
 
     return TB_OK;
@@ -4197,6 +4245,61 @@ static int cellbuf_resize(struct cellbuf *c, int w, int h) {
     tb_free(prev);
 
     return TB_OK;
+}
+
+/*
+ * Clear only the rows exposed by a scroll operation rather than invalidating
+ * the whole screen. This preserves the useful part of the front-buffer cache
+ * and makes the next present emit only the rows the caller repainted.
+ */
+static int cellbuf_clear_row_range(struct cellbuf *c, int y, int height) {
+    int rv, x, row;
+    uint32_t space = (uint32_t)' ';
+    for (row = y; row < y + height; row++) {
+        for (x = 0; x < c->width; x++) {
+            struct tb_cell *cell;
+            if_err_return(rv, cellbuf_get(c, x, row, &cell));
+            if_err_return(rv, cell_set(cell, &space, 1, global.fg, global.bg));
+        }
+    }
+    return TB_OK;
+}
+
+/*
+ * Mirror a terminal scroll operation in a cell buffer. The public scroll API
+ * uses this for both front and back buffers after queueing the terminal escape
+ * sequence; that keeps termbox's diff state aligned with the physical terminal
+ * while leaving only the exposed rows dirty for the caller to repaint.
+ */
+static int cellbuf_scroll_region(struct cellbuf *c, int y, int height,
+    int delta) {
+    if (delta == 0 || height <= 0) return TB_OK;
+
+    int lines = delta < 0 ? -delta : delta;
+    if (lines >= height) return cellbuf_clear_row_range(c, y, height);
+
+    int row, x, rv;
+    if (delta > 0) {
+        for (row = y; row < y + height - lines; row++) {
+            for (x = 0; x < c->width; x++) {
+                struct tb_cell *dst, *src;
+                if_err_return(rv, cellbuf_get(c, x, row, &dst));
+                if_err_return(rv, cellbuf_get(c, x, row + lines, &src));
+                if_err_return(rv, cell_copy(dst, src));
+            }
+        }
+        return cellbuf_clear_row_range(c, y + height - lines, lines);
+    }
+
+    for (row = y + height - 1; row >= y + lines; row--) {
+        for (x = 0; x < c->width; x++) {
+            struct tb_cell *dst, *src;
+            if_err_return(rv, cellbuf_get(c, x, row, &dst));
+            if_err_return(rv, cellbuf_get(c, x, row - lines, &src));
+            if_err_return(rv, cell_copy(dst, src));
+        }
+    }
+    return cellbuf_clear_row_range(c, y, lines);
 }
 
 static int bytebuf_puts(struct bytebuf *b, const char *str) {

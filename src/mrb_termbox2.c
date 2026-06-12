@@ -283,6 +283,28 @@ mrb_tb2_print(mrb_state *mrb, mrb_value self)
   return mrb_nil_value();
 }
 
+static mrb_value
+mrb_tb2_send_bytes(mrb_state *mrb, mrb_value self)
+{
+  const char *str;
+  mrb_int len;
+  mrb_get_args(mrb, "s", &str, &len);
+  int rv = tb_send(str, (size_t)len);
+  TB_CHECK(mrb, rv);
+  return mrb_nil_value();
+}
+
+static mrb_value
+mrb_tb2_scroll_region(mrb_state *mrb, mrb_value self)
+{
+  mrb_int y, height, delta;
+  mrb_get_args(mrb, "iii", &y, &height, &delta);
+  int rv;
+  TB_RETRY(rv, tb_scroll_region((int)y, (int)height, (int)delta));
+  TB_CHECK(mrb, rv);
+  return mrb_bool_value(rv == TB_OK);
+}
+
 /* Info */
 
 static mrb_value
@@ -423,7 +445,9 @@ mrb_mruby_termbox2_gem_init(mrb_state *mrb)
   mrb_define_module_function(mrb, tb2_module, "peek_event", mrb_tb2_peek_event, MRB_ARGS_REQ(1));
 
   /* Output */
-  mrb_define_module_function(mrb, tb2_module, "print", mrb_tb2_print, MRB_ARGS_REQ(5));
+  mrb_define_module_function(mrb, tb2_module, "print",      mrb_tb2_print,      MRB_ARGS_REQ(5));
+  mrb_define_module_function(mrb, tb2_module, "send_bytes", mrb_tb2_send_bytes, MRB_ARGS_REQ(1));
+  mrb_define_module_function(mrb, tb2_module, "scroll_region", mrb_tb2_scroll_region, MRB_ARGS_REQ(3));
 
   /* Info */
   mrb_define_module_function(mrb, tb2_module, "last_errno",     mrb_tb2_last_errno,    MRB_ARGS_NONE());

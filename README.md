@@ -58,6 +58,8 @@ end
 | `Termbox2.poll_event` | Block until an event, returns `Event` |
 | `Termbox2.peek_event(timeout_ms)` | Check for event with timeout, returns `Event` or `nil` |
 | `Termbox2.print(x, y, fg, bg, str)` | Print a string |
+| `Termbox2.send_bytes(str)` | Queue raw terminal bytes |
+| `Termbox2.scroll_region(y, height, delta)` | Scroll a terminal region |
 | `Termbox2.last_errno` | Last errno value |
 | `Termbox2.strerror(err)` | Error string for error code |
 | `Termbox2.has_truecolor?` | True if truecolor is supported |
