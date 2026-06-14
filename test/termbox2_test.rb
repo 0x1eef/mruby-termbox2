@@ -31,7 +31,9 @@ assert("Termbox2 responds to module functions") do
   assert_true Termbox2.respond_to?(:set_cursor)
   assert_true Termbox2.respond_to?(:hide_cursor)
   assert_true Termbox2.respond_to?(:set_cell)
+  assert_true Termbox2.respond_to?(:set_cell_ex)
   assert_true Termbox2.respond_to?(:extend_cell)
+  assert_true Termbox2.respond_to?(:wcwidth)
   assert_true Termbox2.respond_to?(:set_input_mode)
   assert_true Termbox2.respond_to?(:set_output_mode)
   assert_true Termbox2.respond_to?(:poll_event)
@@ -46,6 +48,11 @@ assert("Termbox2 responds to module functions") do
   assert_true Termbox2.respond_to?(:attr_width)
   assert_true Termbox2.respond_to?(:version)
   assert_true Termbox2.respond_to?(:with_init)
+end
+
+
+assert("wcwidth returns a display width") do
+  assert_equal 1, Termbox2.wcwidth(0x41)
 end
 
 assert("Termbox2::Event has instance methods") do
@@ -211,6 +218,10 @@ end
 
 assert("set_cell raises Termbox2::Error when not initialized") do
   assert_raise(Termbox2::Error) { Termbox2.set_cell(0, 0, 0x40, Termbox2::DEFAULT, Termbox2::DEFAULT) }
+end
+
+assert("set_cell_ex raises Termbox2::Error when not initialized") do
+  assert_raise(Termbox2::Error) { Termbox2.set_cell_ex(0, 0, [0x65, 0x301], Termbox2::DEFAULT, Termbox2::DEFAULT) }
 end
 
 assert("print raises Termbox2::Error when not initialized") do

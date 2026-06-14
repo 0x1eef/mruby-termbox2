@@ -4,6 +4,7 @@
 #define TB_IMPL
 
 #include "mruby.h"
+#include "mruby/array.h"
 #include "mruby/class.h"
 #include "mruby/data.h"
 #include "mruby/string.h"
@@ -208,6 +209,30 @@ mrb_tb2_set_cell(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
+mrb_tb2_set_cell_ex(mrb_state *mrb, mrb_value self)
+{
+  mrb_int x, y, fg, bg;
+  mrb_value chars;
+  mrb_get_args(mrb, "iiAii", &x, &y, &chars, &fg, &bg);
+
+  mrb_int len = RARRAY_LEN(chars);
+  if (len <= 0) {
+    return mrb_nil_value();
+  }
+
+  uint32_t *codepoints = (uint32_t *)mrb_malloc(mrb, sizeof(uint32_t) * len);
+  for (mrb_int i = 0; i < len; i++) {
+    codepoints[i] = (uint32_t)mrb_integer(mrb_ary_ref(mrb, chars, i));
+  }
+
+  int rv;
+  TB_RETRY(rv, tb_set_cell_ex((int)x, (int)y, codepoints, (size_t)len, (uintattr_t)fg, (uintattr_t)bg));
+  mrb_free(mrb, codepoints);
+  TB_CHECK(mrb, rv);
+  return mrb_nil_value();
+}
+
+static mrb_value
 mrb_tb2_extend_cell(mrb_state *mrb, mrb_value self)
 {
   mrb_int x, y, ch;
@@ -216,6 +241,15 @@ mrb_tb2_extend_cell(mrb_state *mrb, mrb_value self)
   TB_RETRY(rv, tb_extend_cell((int)x, (int)y, (uint32_t)ch));
   TB_CHECK(mrb, rv);
   return mrb_nil_value();
+}
+
+
+static mrb_value
+mrb_tb2_wcwidth(mrb_state *mrb, mrb_value self)
+{
+  mrb_int ch;
+  mrb_get_args(mrb, "i", &ch);
+  return mrb_fixnum_value(tb_wcwidth((uint32_t)ch));
 }
 
 /* Modes */
@@ -434,7 +468,9 @@ mrb_mruby_termbox2_gem_init(mrb_state *mrb)
 
   /* Cells */
   mrb_define_module_function(mrb, tb2_module, "set_cell",    mrb_tb2_set_cell,    MRB_ARGS_REQ(5));
+  mrb_define_module_function(mrb, tb2_module, "set_cell_ex", mrb_tb2_set_cell_ex, MRB_ARGS_REQ(5));
   mrb_define_module_function(mrb, tb2_module, "extend_cell", mrb_tb2_extend_cell, MRB_ARGS_REQ(3));
+  mrb_define_module_function(mrb, tb2_module, "wcwidth",     mrb_tb2_wcwidth,     MRB_ARGS_REQ(1));
 
   /* Modes */
   mrb_define_module_function(mrb, tb2_module, "set_input_mode",  mrb_tb2_set_input_mode,  MRB_ARGS_REQ(1));
